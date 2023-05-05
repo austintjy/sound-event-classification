@@ -8,19 +8,21 @@ __maintainer__ = "Soham Tiwari"
 __email__ = "soham.tiwari800@gmail.com"
 __status__ = "Development"
 
-use_resampled_data = False
+use_resampled_data = True
 
 model_archs = ['mobilenetv2', 'pann_cnn10', 'pann_cnn14', "mobilenetv3"]
 class_mapping = {}
 if use_resampled_data:
-    class_mapping['Breaking'] = 0
-    class_mapping['Crowd'] = 1
-    class_mapping['Crying, sobbing'] = 2
-    class_mapping['Explosion'] = 3
-    class_mapping['Gunshot, gunfire'] = 4
-    class_mapping['Motor vehicle (road)'] = 5
-    class_mapping['Screaming'] = 6
-    class_mapping['Siren'] = 7
+    class_mapping['breaking'] = 0
+    class_mapping['crowd'] = 1
+    class_mapping['crying'] = 2
+    class_mapping['explosion'] = 3
+    class_mapping['gunshot'] = 4
+    class_mapping['motor'] = 5
+    class_mapping['siren'] = 6
+    class_mapping['speech'] = 7
+    #class_mapping['others'] = 8
+    class_mapping['silence'] = 8
 else:
     class_mapping['breaking'] = 0
     class_mapping['chatter'] = 1
@@ -42,7 +44,7 @@ amsgrad = True
 verbose = True
 patience = 5
 epochs = 50
-early_stopping = 20
+early_stopping = 10
 gpu = False
 channels = 2
 length_full_recording = 10
@@ -53,7 +55,7 @@ seed = 42
 # nfft/window_len           2560        7056
 # hop_len                   694         1912
 # num_frames                656         84
-sample_rate = 16000
+sample_rate = 44100
 threshold = 0.9
 # n_fft = (2560*sample_rate)//44100
 # n_fft = 2048
@@ -73,7 +75,10 @@ workspace = '/notebooks/sound-event-classification/audioset'
 target_names = list(class_mapping.keys())
 num_classes = len(target_names)
 # for balancedbatchsampler, for every batch to have equal number of samples, the size of each batch should be a multiple of the num of classes
-batch_size = 32
+#batch_size = 64
+#batch_size = 128 #this works for paperspace Free-A5000
+batch_size = 288 #this works for paperspace Free-A6000
+#batch_size = 512 #Free-A100-80G
 grad_acc_steps = 1
 
 # voting = 'simple_average'
@@ -83,7 +88,7 @@ sum_weights = sum(weights)
 normalised_weights = np.array(weights)/sum_weights
 
 # CBAM
-use_cbam = False
+use_cbam = True
 cbam_channels = 512
 cbam_reduction_factor = 16
 cbam_kernel_size = 7

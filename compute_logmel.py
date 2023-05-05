@@ -6,7 +6,7 @@ from glob import glob
 from tqdm import tqdm
 import argparse
 from loguru import logger
-from config_global import n_fft, hop_length, n_mels, fmin, fmax, sample_rate, num_cores, remove_codec_from_filename
+from config_global import n_fft, hop_length, n_mels, fmin, fmax, sample_rate, num_cores, remove_codec_from_filename, verbose
 import warnings
 
 number_of_files_success = 0
@@ -32,10 +32,20 @@ def remove_codec_substr(filename: str, remove_codec_from_filename: bool = True):
 @logger.catch
 def compute_melspec(filename, outdir, audio_segment_length):
     global number_of_files_success
+    save_path = os.path.join(outdir, remove_codec_substr(filename,
+                remove_codec_from_filename) + '.npy')
+    
+    #Prevent generating melspec when .npy already exists
+    if not args.overwrite_logmelspec and os.path.exists(save_path):
+        return
     try:
         wav = librosa.load(filename, sr=sample_rate)[0]
-        if(audio_segment_length != -1 and audio_segment_length != 0):
-            wav = wav[:sample_rate*audio_segment_length]
+    except:
+        return
+    
+    if(audio_segment_length != -1 and audio_segment_length != 0):
+        wav = wav[:sample_rate*audio_segment_length]
+    try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             melspec = librosa.feature.melspectrogram(
@@ -47,10 +57,9 @@ def compute_melspec(filename, outdir, audio_segment_length):
                 fmin=fmin,
                 fmax=fmax)
         logmel = librosa.core.power_to_db(melspec)
-        save_path = os.path.join(outdir, remove_codec_substr(filename,
-                remove_codec_from_filename) + '.npy')
         np.save(save_path, logmel)
-        logger.success(save_path)
+        if verbose:
+            logger.success(save_path)
         number_of_files_success+=1
     except ValueError:
         print('ERROR IN:', filename)
@@ -68,13 +77,24 @@ def main(input_path, output_path, audio_segment_length):
     logger.info(f"sample_rate = {sample_rate}")
     logger.info(f"num_cores = {num_cores}")
     logger.info(f"remove_codec_from_filename = {remove_codec_from_filename}")
+    logger.info(f"overwrite_logmelspec = {args.overwrite_logmelspec}")
     logger.info(f'Starting computing logmels using above params.')
     file_list = glob(input_path + '/*.wav')
     os.makedirs(output_path, exist_ok=True)
-    _ = Parallel(n_jobs=num_cores)(
-        delayed(lambda x: compute_melspec(
-            x, output_path, audio_segment_length))(x)
-        for x in tqdm(file_list))
+    
+    try:
+        _ = Parallel(n_jobs=num_cores)(
+            delayed(lambda x: compute_melspec(
+                x, output_path, audio_segment_length))(x)
+            for x in tqdm(file_list))
+    except:
+        # Add a fallback to using threading backend if the primary backend fails
+        print("Using threading backend")
+        _ = Parallel(n_jobs=num_cores,backend='threading')(
+            delayed(lambda x: compute_melspec(
+                x, output_path, audio_segment_length))(x)
+            for x in tqdm(file_list))
+    
     global number_of_files_success
     logger.success(f'Finished computing logmels using sr = {sample_rate}, total successfully converted to logmels = {number_of_files_success}')
 
@@ -87,6 +107,7 @@ if __name__ == '__main__':
                         help="Specifies directory for generated spectrograms.")
     parser.add_argument('-a', '--audio_segment_length', type=int,
                         help="Specifies length of audio segment to extract from each audio file. Default -1(Consider full length audio).", default=-1)
+    parser.add_argument('-o', '--overwrite_logmelspec', type=bool, help="Specifies whether logmelspec will be generated if it already exists (setting this to False will prevent generation when a file already exists)", default=False)
     args = parser.parse_args()
 
     main(args.input_path, args.output_path, args.audio_segment_length)

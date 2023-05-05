@@ -15,10 +15,10 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import random
 import argparse
-from utils import AudioDataset, Task5Model, configureTorchDevice, getSampleRateString, BalancedBatchSampler
+from utils import AudioDataset, Task5Model, configureTorchDevice, getSampleRateString, BalancedBatchSampler, getLabelFromFilename
 from augmentation.SpecTransforms import TimeMask, FrequencyMask, RandomCycle
 from torchsummary import summary
-from config import feature_type, num_frames, seed, permutation, batch_size, num_workers, num_classes, learning_rate, amsgrad, patience, verbose, epochs, workspace, sample_rate, early_stopping, grad_acc_steps, model_arch, pann_cnn10_encoder_ckpt_path, pann_cnn14_encoder_ckpt_path, resume_training, n_mels, use_cbam, use_resampled_data 
+from config import class_mapping, feature_type, num_frames, seed, permutation, batch_size, num_workers, num_classes, learning_rate, amsgrad, patience, verbose, epochs, workspace, sample_rate, early_stopping, grad_acc_steps, model_arch, pann_cnn10_encoder_ckpt_path, pann_cnn14_encoder_ckpt_path, resume_training, n_mels, use_cbam, use_resampled_data 
 import wandb
 import sklearn
 from glob import glob
@@ -32,7 +32,7 @@ __email__ = "soham.tiwari800@gmail.com"
 __status__ = "Development"
 
 def run(args):
-    wandb.init(project="st-project-sec", entity="sohamtiwari3120")
+    wandb.init(project="dcase2021-fyp", entity="austintjy")
     wandb.config.update(args)
     expt_name = args.expt_name
     workspace = args.workspace
@@ -45,6 +45,16 @@ def run(args):
     model_arch = args.model_arch
     use_cbam = args.use_cbam
     use_pna = args.use_pna
+    
+    #Automatically adjust batch size for training
+    auto_batch_size = args.auto_batch_size
+    print(f'Automatic batch size: {auto_batch_size} (Use -abs False to turn off automatic batch size)')
+    if auto_batch_size:
+        free_mem,total_mem = torch.cuda.mem_get_info()
+        print(f'GPU Memory Usage: {str((total_mem - free_mem) / 1024 / 1024 / 1024)}GB/{str(total_mem / 1024 / 1024 / 1024)}GB')
+        batch_size = int(int(free_mem / 1024 / 1024 / 1024) / 0.15625) #0.15625 is a magic number determined through trial and error
+        print(f'Batch size automatically set to {str(batch_size)}')
+        
     print(f'Using cbam: {use_cbam}')
     print(f'Using pna: {use_pna}')
     if model_arch == 'pann_cnn10':
@@ -62,9 +72,31 @@ def run(args):
     os.makedirs('{}/model'.format(workspace), exist_ok=True)
     
     if use_resampled_data:
-        file_list = [os.path.basename(p)[:-8] for p in np.unique(glob('{}/data/{}/audio_{}/*.wav.npy'.format(workspace,
+        train_list = [os.path.basename(p)[:-8] for p in np.unique(glob('{}/data/{}/audio_{}/train/*.wav.npy'.format(workspace,
                                feature_type, getSampleRateString(sample_rate))))]
-        train_list, val_list = sklearn.model_selection.train_test_split(file_list, train_size=0.8, random_state = seed)
+        val_list = [os.path.basename(p)[:-8] for p in np.unique(glob('{}/data/{}/audio_{}/valid/*.wav.npy'.format(workspace,
+                               feature_type, getSampleRateString(sample_rate))))]
+        
+        
+        # Automatically exclude any files/label that are not included in class_mapping, incurs slight overhead but reduces dataset headaches
+        remove_train = []
+        for i in range(len(train_list)-1,-1,-1):
+            label = getLabelFromFilename(os.path.basename(train_list[i]))
+            if label is None:
+                remove_train.append(i)
+        for i in remove_train:
+            del train_list[i]
+        
+        # Automatically exclude any files/label that are not included in class_mapping, incurs slight overhead but reduces dataset headaches
+        remove_val = []
+        for i in range(len(val_list)-1,-1,-1):
+            label = getLabelFromFilename(os.path.basename(val_list[i]))
+            if label is None:
+                remove_val.append(i)
+        for i in remove_val:
+            del val_list[i]
+
+#        train_list, val_list = sklearn.model_selection.train_test_split(file_list, train_size=0.8, random_state = seed)
         train_df = pd.DataFrame(train_list)
         valid_df = pd.DataFrame(val_list)
     else:
@@ -92,14 +124,14 @@ def run(args):
 
     # Create the datasets and the dataloaders
 
-    train_dataset = AudioDataset(workspace, train_df, feature_type=feature_type,
+    train_dataset = AudioDataset(workspace, train_df,"train", feature_type=feature_type,
                                  perm=perm,
                                  resize=num_frames,
                                  image_transform=albumentations_transform,
                                  spec_transform=spec_transforms)
 
     valid_dataset = AudioDataset(
-        workspace, valid_df, feature_type=feature_type, perm=perm, resize=num_frames)
+        workspace, valid_df,"valid", feature_type=feature_type, perm=perm, resize=num_frames)
 
     val_loader = DataLoader(valid_dataset, batch_size,
                             shuffle=False, num_workers=num_workers)
@@ -229,7 +261,9 @@ if __name__ == "__main__":
     parser.add_argument('-bs', '--balanced_sampler', type=bool, default=False)
     parser.add_argument('-cbam', '--use_cbam', action='store_true')
     parser.add_argument('-pna', '--use_pna', action='store_true')
+    parser.add_argument('-abs', '--auto_batch_size', type=bool, default=True)
     parser.add_argument('-ga', '--grad_acc_steps',
                         type=int, default=grad_acc_steps)
+    parser.add_argument('-tt', '--train_type', type=str,default='')
     args = parser.parse_args()
     run(args)

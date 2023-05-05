@@ -55,16 +55,21 @@ def getLabelFromFilename(file_name: str) -> int:
     Returns:
         int: integer label for the audio file name
     """
-    label = class_mapping[file_name.split('-')[0]]
-    return label
+    
+    try:
+        label = class_mapping[file_name.split('-')[0]]
+        return label
+    except Exception as e:
+        return None
 
 
 class AudioDataset(Dataset):
 
-    def __init__(self, workspace, df, feature_type=feature_type, perm=permutation, spec_transform=None, image_transform=None, resize=num_frames, sample_rate=sample_rate):
+    def __init__(self, workspace, df, data_type, feature_type=feature_type, perm=permutation, spec_transform=None, image_transform=None, resize=num_frames, sample_rate=sample_rate):
 
         self.workspace = workspace
         self.df = df
+        self.data_type = data_type
         self.filenames = df[0].unique()
         self.feature_type = feature_type
         self.sample_rate = sample_rate
@@ -90,7 +95,7 @@ class AudioDataset(Dataset):
         labels = getLabelFromFilename(file_name)
 
         sample = np.load(
-            f"{self.workspace}/data/{self.feature_type}/audio_{getSampleRateString(self.sample_rate)}/{file_name}.wav.npy")
+            f"{self.workspace}/data/{self.feature_type}/audio_{getSampleRateString(self.sample_rate)}/{self.data_type}/{file_name}.wav.npy")
 
         if self.resize:
             sample = self.resize(sample)
@@ -321,6 +326,9 @@ class Task5Model(nn.Module):
 
     def forward(self, x):
         if self.model_arch == 'mobilenetv2':
+            if self.use_cbam:
+                self.cbam = CBAMBlock(
+                    channel=1280, reduction=cbam_reduction_factor, kernel_size=cbam_kernel_size)
             x = self.bw2col(x)  # -> (batch_size, 3, n_mels, num_frames)
             x = self.mv2.features(x)
 
