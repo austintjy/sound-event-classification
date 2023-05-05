@@ -87,11 +87,11 @@ Finally, run <br/>
 
 
 ### 8. Dataset Utilities
-Example of how to generate distribution pie charts based on a folder of .wav files
-`python dataset_util.py "path_to_dataset/train_labels/" -a 'chart' -t 'Train set distribution (70%)'`
-`python dataset_util.py "path_to_dataset/test_labels/" -a 'chart' -t 'Test set distribution (15%)'`
-`python dataset_util.py "path_to_dataset/val_labels/" -a 'chart' -t 'Valid set distribution (15%)'`
+Example of how to generate distribution pie charts based on a folder of .wav files <br/>
+`python dataset_util.py "path_to_dataset/train_labels/" -a 'chart' -t 'Train set distribution (70%)'`<br/>
+`python dataset_util.py "path_to_dataset/test_labels/" -a 'chart' -t 'Test set distribution (15%)'`<br/>
+`python dataset_util.py "path_to_dataset/val_labels/" -a 'chart' -t 'Valid set distribution (15%)'`<br/>
 
 
-Data augmentation using audiomentations can be obtained by utilizing the augment action
-`python dataset_util.py "path_to_dataset/train_labels/" -a 'augment' --output_path='/notebooks/feb/augmented/''
+Data augmentation using audiomentations can be obtained by utilizing the augment action<br/>
+`python dataset_util.py "path_to_dataset/train_labels/" -a 'augment' --output_path='/notebooks/feb/augmented/''`
